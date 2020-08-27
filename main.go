@@ -32,9 +32,16 @@ var dateFormats = map[bool]string{
 }
 
 var options struct {
-	Seconds    bool `short:"s" description:"Display Seconds"`
-	Center     bool `short:"c" description:"Center the clock"`
-	TwelveHour bool `short:"t" description:"Display in 12 hour format"`
+	Seconds       bool `short:"s" description:"Display Seconds"`
+	Center        bool `short:"c" description:"Center the clock"`
+	TwelveHour    bool `short:"t" description:"Display in 12 hour format"`
+	xOffset       int
+	yOffset       int
+	terminalSizeX int
+	terminalSizeY int
+	displaySizeX  int
+	displaySizeY  int
+	dateOffset    int
 	sync.RWMutex
 }
 
@@ -62,6 +69,7 @@ func main() {
 	onStyle = tcell.StyleDefault.Background(tcell.ColorRed).Foreground(tcell.ColorBlack)
 	options.Lock()
 	flags.Parse(&options)
+	options.terminalSizeX, options.terminalSizeY = s.Size()
 	options.Unlock()
 
 	forceUpdate := make(chan bool)
@@ -73,6 +81,9 @@ func main() {
 			switch ev := ev.(type) {
 
 			case *tcell.EventResize:
+				options.Lock()
+				options.terminalSizeX, options.terminalSizeY = s.Size()
+				options.Unlock()
 				forceUpdate <- true
 
 			case *tcell.EventKey:
@@ -82,26 +93,69 @@ func main() {
 					s.Fini()
 					os.Exit(0)
 
+				case tcell.KeyDown:
+					options.Lock()
+					options.yOffset++
+					options.Unlock()
+					forceUpdate <- true
+
 				case tcell.KeyRune:
 					switch ev.Rune() {
+
 					case 'q':
 						s.Fini()
 						os.Exit(0)
+
 					case 't', 'T':
 						options.Lock()
 						options.TwelveHour = !options.TwelveHour
 						options.Unlock()
 						forceUpdate <- true
 					case 's', 'S':
+
 						options.Lock()
 						options.Seconds = !options.Seconds
 						options.Unlock()
 						forceUpdate <- true
 					case 'c', 'C':
+
 						options.Lock()
 						options.Center = !options.Center
 						options.Unlock()
 						forceUpdate <- true
+
+					case 'h':
+						options.Lock()
+						if !options.Center && options.xOffset > 0 {
+							options.xOffset--
+						}
+						options.Unlock()
+						forceUpdate <- true
+
+					case 'j':
+						options.Lock()
+						if !options.Center && options.yOffset <= options.terminalSizeY-options.displaySizeY {
+							options.yOffset++
+						}
+						options.Unlock()
+						forceUpdate <- true
+
+					case 'k':
+						options.Lock()
+						if !options.Center && options.yOffset > 0 {
+							options.yOffset--
+						}
+						options.Unlock()
+						forceUpdate <- true
+
+					case 'l':
+						options.Lock()
+						if !options.Center && options.xOffset <= options.terminalSizeX-options.displaySizeX {
+							options.xOffset++
+						}
+						options.Unlock()
+						forceUpdate <- true
+
 					}
 				}
 			}
@@ -111,13 +165,26 @@ func main() {
 	drawClock(s, forceUpdate)
 }
 
+func setCenter() {
+	options.Lock()
+	defer options.Unlock()
+
+	if !options.Center {
+		return
+	}
+
+	xPos := (options.terminalSizeX - options.displaySizeX) / 2
+	yPos := (options.terminalSizeY - options.displaySizeY) / 2
+
+	options.xOffset = xPos - 1
+	options.yOffset = yPos + 2
+}
+
 func drawClock(s tcell.Screen, forceUpdateChan chan bool) {
 	var timeWait time.Time
 	for {
 		currTime := time.Now()
 		timeWait = currTime.Add(time.Second / 2).Round(time.Second)
-		x, y := s.Size()
-		termSize := coord{x, y}
 
 		options.RLock()
 		clockTime := currTime.Format(timeFormats[options.TwelveHour][options.Seconds])
@@ -125,7 +192,10 @@ func drawClock(s tcell.Screen, forceUpdateChan chan bool) {
 		options.RUnlock()
 		displayMatrix := parseArea(clockTime)
 
-		drawArea(s, displayMatrix, termSize, clockDate)
+		// Center the clock if necessary
+		setCenter()
+
+		drawArea(s, displayMatrix, clockDate)
 		s.Show()
 
 		select {
@@ -135,25 +205,26 @@ func drawClock(s tcell.Screen, forceUpdateChan chan bool) {
 	}
 }
 
-func drawArea(s tcell.Screen, displayMatrix [8][]bool, termSize coord, date string) {
-	origin, offset := getOriginAndMid(termSize, &displayMatrix, date)
+func drawArea(s tcell.Screen, displayMatrix [][]bool, date string) {
 	s.Clear()
+	options.RLock()
+	defer options.RUnlock()
 	for j, v := range displayMatrix {
 		for i, x := range v {
 			if x {
-				s.SetContent(origin.x+i, origin.y+j, ' ', nil, onStyle)
+				s.SetContent(options.xOffset+i, options.yOffset+j, ' ', nil, onStyle)
 			} else {
-				s.SetContent(origin.x+i, origin.y+j, ' ', nil, defStyle)
+				s.SetContent(options.xOffset+i, options.yOffset+j, ' ', nil, defStyle)
 			}
 		}
 	}
 	for i, v := range date {
-		s.SetContent(origin.x+offset+i, origin.y+7, v, nil, defStyle)
+		s.SetContent(options.xOffset+options.displaySizeX/2-4+i, options.yOffset+7, v, nil, defStyle)
 	}
 }
 
-func parseArea(time string) [8][]bool {
-	output := [8][]bool{}
+func parseArea(time string) [][]bool {
+	output := make([][]bool, 6)
 
 	for _, v := range time {
 		char := character[v]
@@ -166,20 +237,18 @@ func parseArea(time string) [8][]bool {
 
 	}
 
+	length := 0
+	for _, v := range output {
+		if len(v) > length {
+			length = len(v)
+		}
+	}
+
+	options.Lock()
+	options.displaySizeX = length + 1
+	options.displaySizeY = len(output) + 3
+	options.Unlock()
+
 	return output
 
-}
-
-func getOriginAndMid(termSize coord, displayMatrix *[8][]bool, date string) (coord, int) {
-	var center coord
-	if options.Center {
-		center = coord{x: (termSize.x-len(displayMatrix[1]))/2 - 1, y: (termSize.y - 7) / 2}
-	}
-	if center.x < 0 {
-		center.x = 0
-	}
-	if center.y < 0 {
-		center.y = 0
-	}
-	return center, (len(displayMatrix[1])-len(date))/2 + 1
 }
