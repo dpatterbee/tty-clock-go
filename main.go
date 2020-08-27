@@ -31,8 +31,6 @@ var dateFormats = map[bool]string{
 	true: "2006-01-02 [PM]", false: "2006-01-02",
 }
 
-var col = [4]int{0, 7, 19, 26}
-
 var options struct {
 	Seconds    bool `short:"s" description:"Display Seconds"`
 	Center     bool `short:"c" description:"Center the clock"`
@@ -116,10 +114,11 @@ func main() {
 func drawClock(s tcell.Screen, forceUpdateChan chan bool) {
 	var timeWait time.Time
 	for {
+		currTime := time.Now()
+		timeWait = currTime.Add(time.Second / 2).Round(time.Second)
 		x, y := s.Size()
 		termSize := coord{x, y}
 
-		currTime := time.Now()
 		options.RLock()
 		clockTime := currTime.Format(timeFormats[options.TwelveHour][options.Seconds])
 		clockDate := currTime.Format(dateFormats[options.TwelveHour])
@@ -133,7 +132,6 @@ func drawClock(s tcell.Screen, forceUpdateChan chan bool) {
 		case <-forceUpdateChan:
 		case <-time.After(time.Until(timeWait)):
 		}
-		timeWait = time.Now().Round(time.Second).Add(time.Second)
 	}
 }
 
