@@ -132,7 +132,7 @@ func main() {
 
 					case 'h':
 						options.Lock()
-						if !options.Center && options.xOffset > 0 {
+						if !options.Center && options.xOffset > 1 {
 							options.xOffset--
 						}
 						options.Unlock()
@@ -225,12 +225,12 @@ func drawArea(s tcell.Screen, displayMatrix [][]bool, date string) {
 		}
 	}
 	for i, v := range date {
-		s.SetContent(options.xOffset+options.displaySizeX/2-4+i, options.yOffset+7, v, nil, options.defStyle)
+		s.SetContent(options.xOffset+options.displaySizeX/2-4+i, options.yOffset+6, v, nil, options.defStyle)
 	}
 }
 
 func parseArea(time string) [][]bool {
-	output := make([][]bool, 6)
+	output := make([][]bool, 5)
 
 	for _, v := range time {
 		char := character[v]
@@ -238,7 +238,7 @@ func parseArea(time string) [][]bool {
 			output[i] = append(output[i], false)
 		}
 		for i, x := range char {
-			output[i+1] = append(output[i+1], x...)
+			output[i] = append(output[i], x...)
 		}
 
 	}
@@ -252,7 +252,7 @@ func parseArea(time string) [][]bool {
 
 	options.Lock()
 	options.displaySizeX = length + 1
-	options.displaySizeY = len(output) + 3
+	options.displaySizeY = len(output) + 2
 	options.Unlock()
 
 	return output
