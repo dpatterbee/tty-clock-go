@@ -168,6 +168,7 @@ func main() {
 		}
 	}()
 
+	// Main program loop lives here
 	drawClock(s, forceUpdate)
 }
 
@@ -187,26 +188,38 @@ func setCenter() {
 }
 
 func drawClock(s tcell.Screen, forceUpdateChan chan bool) {
-	var timeWait time.Time
-	for {
-		currTime := time.Now()
-		timeWait = currTime.Add(time.Second / 2).Round(time.Second)
+	// Sleep until just after a whole second. Ensures that clock updates as close to on time as I can easily manage
+	time.Sleep(time.Until(time.Now().Add(time.Second / 2).Round(time.Second)))
 
+	// Create a ticker that fires once per second, defer stop even though that will literally never happen
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
+
+	// Initialise loop variables, locking where necessary.
+	currTime := time.Now()
+	var clockTime, clockDate string
+
+	for {
 		options.RLock()
-		clockTime := currTime.Format(timeFormats[options.TwelveHour][options.Seconds])
-		clockDate := currTime.Format(dateFormats[options.TwelveHour])
+		clockTime = currTime.Format(timeFormats[options.TwelveHour][options.Seconds])
+		clockDate = currTime.Format(dateFormats[options.TwelveHour])
 		options.RUnlock()
+		// Parse the current formatted time into a cell layout
 		displayMatrix := parseArea(clockTime)
 
 		// Center the clock if necessary
 		setCenter()
 
+		// Set the correct cells to on and off and update the display
 		drawArea(s, displayMatrix, clockDate)
 		s.Show()
 
 		select {
+		case currTime = <-ticker.C:
+			// Update time when ticker fires
+			currTime = time.Now()
 		case <-forceUpdateChan:
-		case <-time.After(time.Until(timeWait)):
+			// Update display when another thread updates something which could affect the display
 		}
 	}
 }
