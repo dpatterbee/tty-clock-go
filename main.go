@@ -70,6 +70,7 @@ func main() {
 	options.Lock()
 	flags.Parse(&options)
 	options.terminalSizeX, options.terminalSizeY = s.Size()
+	options.yOffset = 1
 	options.Unlock()
 
 	forceUpdate := make(chan bool)
@@ -126,7 +127,7 @@ func main() {
 
 					case 'h':
 						options.Lock()
-						if !options.Center && options.xOffset > 1 {
+						if !options.Center && options.xOffset > 0 {
 							options.xOffset--
 						}
 						options.Unlock()
@@ -134,7 +135,7 @@ func main() {
 
 					case 'j':
 						options.Lock()
-						if !options.Center && options.yOffset <= options.terminalSizeY-options.displaySizeY {
+						if !options.Center && options.yOffset < options.terminalSizeY-options.displaySizeY-1 {
 							options.yOffset++
 						}
 						options.Unlock()
@@ -142,7 +143,7 @@ func main() {
 
 					case 'k':
 						options.Lock()
-						if !options.Center && options.yOffset > 0 {
+						if !options.Center && options.yOffset > 1 {
 							options.yOffset--
 						}
 						options.Unlock()
@@ -150,7 +151,7 @@ func main() {
 
 					case 'l':
 						options.Lock()
-						if !options.Center && options.xOffset <= options.terminalSizeX-options.displaySizeX {
+						if !options.Center && options.xOffset < options.terminalSizeX-options.displaySizeX-1 {
 							options.xOffset++
 						}
 						options.Unlock()
@@ -219,7 +220,7 @@ func drawArea(s tcell.Screen, displayMatrix [][]bool, date string) {
 		}
 	}
 	for i, v := range date {
-		s.SetContent(options.xOffset+options.displaySizeX/2-4+i, options.yOffset+6, v, nil, defStyle)
+		s.SetContent(options.xOffset+options.displaySizeX/2-5+i, options.yOffset+6, v, nil, defStyle)
 	}
 }
 
@@ -247,6 +248,21 @@ func parseArea(time string) [][]bool {
 	options.Lock()
 	options.displaySizeX = length + 1
 	options.displaySizeY = len(output) + 2
+
+	if options.xOffset+options.displaySizeX > options.terminalSizeX {
+		if options.displaySizeX > options.terminalSizeX {
+			options.xOffset = 0
+		} else {
+			options.xOffset = options.terminalSizeX - options.displaySizeX
+		}
+	}
+	if options.yOffset+options.displaySizeY > options.terminalSizeY {
+		if options.displaySizeY > options.terminalSizeY {
+			options.yOffset = 1
+		} else {
+			options.yOffset = options.terminalSizeY - options.displaySizeY
+		}
+	}
 	options.Unlock()
 
 	return output
