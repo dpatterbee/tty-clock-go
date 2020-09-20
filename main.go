@@ -81,98 +81,105 @@ func main() {
 
 	forceUpdate := make(chan bool)
 
-	go func() {
-		for {
-			ev := s.PollEvent()
-			// You like switches? We got em
-			switch ev := ev.(type) {
+	go handleInput(s, forceUpdate)
 
-			case *tcell.EventResize:
+	// Draws initial clock before main loop setup so that it appears as soon as the program launches and not up to 1 second later.
+	drawClock(s, time.Now())
+
+	// Main program loop lives here
+	updateClock(s, forceUpdate)
+}
+
+// handleInput asynchronously polls for input events and handles each accordingly, forcing an update to the clock face when required.
+func handleInput(s tcell.Screen, forceUpdate chan bool) {
+	for {
+		ev := s.PollEvent()
+		// You like switches? We got em
+		switch ev := ev.(type) {
+
+		case *tcell.EventResize:
+			options.Lock()
+			options.terminalSizeX, options.terminalSizeY = s.Size()
+			options.Unlock()
+			forceUpdate <- true
+
+		case *tcell.EventKey:
+			switch ev.Key() {
+
+			case tcell.KeyEscape:
+				s.Fini()
+				os.Exit(0)
+
+			case tcell.KeyDown:
 				options.Lock()
-				options.terminalSizeX, options.terminalSizeY = s.Size()
+				options.yOffset++
 				options.Unlock()
 				forceUpdate <- true
 
-			case *tcell.EventKey:
-				switch ev.Key() {
+			case tcell.KeyRune:
+				switch ev.Rune() {
 
-				case tcell.KeyEscape:
+				case 'q':
 					s.Fini()
 					os.Exit(0)
 
-				case tcell.KeyDown:
+				case 't', 'T':
 					options.Lock()
-					options.yOffset++
+					options.TwelveHour = !options.TwelveHour
+					options.Unlock()
+					forceUpdate <- true
+				case 's', 'S':
+
+					options.Lock()
+					options.Seconds = !options.Seconds
+					options.Unlock()
+					forceUpdate <- true
+				case 'c', 'C':
+
+					options.Lock()
+					options.Center = !options.Center
 					options.Unlock()
 					forceUpdate <- true
 
-				case tcell.KeyRune:
-					switch ev.Rune() {
-
-					case 'q':
-						s.Fini()
-						os.Exit(0)
-
-					case 't', 'T':
-						options.Lock()
-						options.TwelveHour = !options.TwelveHour
-						options.Unlock()
-						forceUpdate <- true
-					case 's', 'S':
-
-						options.Lock()
-						options.Seconds = !options.Seconds
-						options.Unlock()
-						forceUpdate <- true
-					case 'c', 'C':
-
-						options.Lock()
-						options.Center = !options.Center
-						options.Unlock()
-						forceUpdate <- true
-
-					case 'h':
-						options.Lock()
-						if !options.Center && options.xOffset > 0 {
-							options.xOffset--
-						}
-						options.Unlock()
-						forceUpdate <- true
-
-					case 'j':
-						options.Lock()
-						if !options.Center && options.yOffset < options.terminalSizeY-options.displaySizeY-1 {
-							options.yOffset++
-						}
-						options.Unlock()
-						forceUpdate <- true
-
-					case 'k':
-						options.Lock()
-						if !options.Center && options.yOffset > 1 {
-							options.yOffset--
-						}
-						options.Unlock()
-						forceUpdate <- true
-
-					case 'l':
-						options.Lock()
-						if !options.Center && options.xOffset < options.terminalSizeX-options.displaySizeX-1 {
-							options.xOffset++
-						}
-						options.Unlock()
-						forceUpdate <- true
-
+				case 'h':
+					options.Lock()
+					if !options.Center && options.xOffset > 0 {
+						options.xOffset--
 					}
+					options.Unlock()
+					forceUpdate <- true
+
+				case 'j':
+					options.Lock()
+					if !options.Center && options.yOffset < options.terminalSizeY-options.displaySizeY-1 {
+						options.yOffset++
+					}
+					options.Unlock()
+					forceUpdate <- true
+
+				case 'k':
+					options.Lock()
+					if !options.Center && options.yOffset > 1 {
+						options.yOffset--
+					}
+					options.Unlock()
+					forceUpdate <- true
+
+				case 'l':
+					options.Lock()
+					if !options.Center && options.xOffset < options.terminalSizeX-options.displaySizeX-1 {
+						options.xOffset++
+					}
+					options.Unlock()
+					forceUpdate <- true
+
 				}
 			}
 		}
-	}()
-
-	// Main program loop lives here
-	drawClock(s, forceUpdate)
+	}
 }
 
+// setCenter checks if the "Center" option is set and, if so, sets the clock X and Y offset to position the clock centrally
 func setCenter() {
 	options.Lock()
 	defer options.Unlock()
@@ -181,69 +188,61 @@ func setCenter() {
 		return
 	}
 
-	xPos := (options.terminalSizeX - options.displaySizeX) / 2
-	yPos := (options.terminalSizeY - options.displaySizeY) / 2
-
-	options.xOffset = xPos - 1
-	options.yOffset = yPos + 2
+	options.xOffset = (options.terminalSizeX-options.displaySizeX)/2 - 1
+	options.yOffset = (options.terminalSizeY-options.displaySizeY)/2 + 2
 }
 
-func drawClock(s tcell.Screen, forceUpdateChan chan bool) {
-	// Sleep until just after a whole second. Ensures that clock updates as close to on time as I can easily manage
+// updateClock starts a loop at the beginning of the second after it is called which calls the clock updating function.
+// It loops anytime there is input or when a second has passed.
+func updateClock(s tcell.Screen, forceUpdateChan chan bool) {
 	time.Sleep(time.Until(time.Now().Add(time.Second / 2).Round(time.Second)))
 
-	// Create a ticker that fires once per second, defer stop even though that will literally never happen
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
 
-	// Initialise loop variables, locking where necessary.
 	currTime := time.Now()
-	var clockTime, clockDate string
 
 	for {
-		options.RLock()
-		clockTime = currTime.Format(timeFormats[options.TwelveHour][options.Seconds])
-		clockDate = currTime.Format(dateFormats[options.TwelveHour])
-		options.RUnlock()
-		// Parse the current formatted time into a cell layout
-		displayMatrix := parseArea(clockTime)
+		drawClock(s, currTime)
 
-		// Center the clock if necessary
-		setCenter()
-
-		// Set the correct cells to on and off and update the display
-		drawArea(s, displayMatrix, clockDate)
-		s.Show()
-
+		// Waits for next tick of ticker or next forced update,
 		select {
 		case currTime = <-ticker.C:
-			// Update time when ticker fires
-			currTime = time.Now()
 		case <-forceUpdateChan:
-			// Update display when another thread updates something which could affect the display
 		}
 	}
 }
 
-func drawArea(s tcell.Screen, displayMatrix [][]bool, date string) {
+// drawClock takes the current time, formats and positions it according to the current settings, and displays it on the terminal screen.
+func drawClock(s tcell.Screen, t time.Time) {
+	options.RLock()
+	clockTime := t.Format(timeFormats[options.TwelveHour][options.Seconds])
+	clockDate := t.Format(dateFormats[options.TwelveHour])
+	options.RUnlock()
+
+	displayMatrix := clockMatrix(clockTime)
+
+	setCenter()
 	s.Clear()
 	options.RLock()
-	defer options.RUnlock()
-	for j, v := range displayMatrix {
-		for i, x := range v {
-			if x {
-				s.SetContent(options.xOffset+i, options.yOffset+j, ' ', nil, options.onStyle)
+	for i, v := range displayMatrix {
+		for j, w := range v {
+			if w {
+				s.SetContent(options.xOffset+j, options.yOffset+i, ' ', nil, options.onStyle)
 			} else {
-				s.SetContent(options.xOffset+i, options.yOffset+j, ' ', nil, options.defStyle)
+				s.SetContent(options.xOffset+j, options.yOffset+i, ' ', nil, options.defStyle)
 			}
 		}
 	}
-	for i, v := range date {
+	for i, v := range clockDate {
 		s.SetContent(options.xOffset+options.displaySizeX/2-5+i, options.yOffset+6, v, nil, options.defStyle)
 	}
+	options.RUnlock()
+	s.Show()
 }
 
-func parseArea(time string) [][]bool {
+// clockMatrix returns a boolean matrix which represents the clock face where true represents "on" cells and false represents "off" cells.
+func clockMatrix(time string) [][]bool {
 	output := make([][]bool, 5)
 
 	for _, v := range time {
