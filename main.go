@@ -32,19 +32,22 @@ var dateFormats = map[bool]string{
 }
 
 var options struct {
-	Seconds       bool `short:"s" description:"Display Seconds"`
-	Center        bool `short:"c" description:"Center the clock"`
-	TwelveHour    bool `short:"t" description:"Display in 12 hour format"`
-	Colour        int  `short:"C" default:"2" description:"Choose clock colour [1-378]"`
-	xOffset       int
-	yOffset       int
-	terminalSizeX int
-	terminalSizeY int
-	displaySizeX  int
-	displaySizeY  int
-	dateOffset    int
-	defStyle      tcell.Style
-	onStyle       tcell.Style
+	Seconds           bool `short:"s" description:"Display Seconds"`
+	Center            bool `short:"c" description:"Center the clock"`
+	TwelveHour        bool `short:"t" description:"Display in 12 hour format"`
+	Colour            int  `short:"C" default:"2" description:"Choose clock colour [1-378]"`
+	Rebound           bool `short:"r" description:"Do rebound the clock"`
+	xOffset           int
+	yOffset           int
+	terminalSizeX     int
+	terminalSizeY     int
+	displaySizeX      int
+	displaySizeY      int
+	xReboundDirection int
+	yReboundDirection int
+	dateOffset        int
+	defStyle          tcell.Style
+	onStyle           tcell.Style
 	sync.RWMutex
 }
 
@@ -142,36 +145,24 @@ func handleInput(s tcell.Screen, forceUpdate chan bool) {
 					forceUpdate <- true
 
 				case 'h':
-					options.Lock()
-					if !options.Center && options.xOffset > 0 {
-						options.xOffset--
-					}
-					options.Unlock()
+					moveClock(-1, 0)
 					forceUpdate <- true
 
 				case 'j':
-					options.Lock()
-					if !options.Center && options.yOffset < options.terminalSizeY-options.displaySizeY-1 {
-						options.yOffset++
-					}
-					options.Unlock()
+					moveClock(0, 1)
 					forceUpdate <- true
 
 				case 'k':
-					options.Lock()
-					if !options.Center && options.yOffset > 1 {
-						options.yOffset--
-					}
-					options.Unlock()
+					moveClock(0, -1)
 					forceUpdate <- true
 
 				case 'l':
-					options.Lock()
-					if !options.Center && options.xOffset < options.terminalSizeX-options.displaySizeX-1 {
-						options.xOffset++
-					}
-					options.Unlock()
+					moveClock(1, 0)
 					forceUpdate <- true
+				case 'r', 'R':
+					options.Lock()
+					options.Rebound = !options.Rebound
+					options.Unlock()
 
 				}
 			}
@@ -192,6 +183,47 @@ func setCenter() {
 	options.yOffset = (options.terminalSizeY-options.displaySizeY)/2 + 2
 }
 
+func doRebound() {
+	options.Lock()
+	defer options.Unlock()
+
+	if !options.Rebound {
+		return
+	}
+
+	if options.xOffset < 1 {
+		options.xReboundDirection = 1
+	}
+	if options.yOffset <= 1 {
+		options.yReboundDirection = 1
+	}
+	if options.xOffset > options.terminalSizeX-options.displaySizeX-1 {
+		options.xReboundDirection = -1
+	}
+	if options.yOffset > options.terminalSizeY-options.displaySizeY-1 {
+		options.yReboundDirection = -1
+	}
+
+	options.xOffset += options.xReboundDirection
+	options.yOffset += options.yReboundDirection
+}
+
+func moveClock(x, y int) {
+	options.Lock()
+	defer options.Unlock()
+
+	if options.Center || options.Rebound {
+		return
+	}
+
+	if options.xOffset+x >= 0 && options.xOffset+x < options.terminalSizeX-options.displaySizeX {
+		options.xOffset += x
+	}
+	if options.yOffset+y > 0 && options.yOffset+y < options.terminalSizeY-options.displaySizeY {
+		options.yOffset += y
+	}
+}
+
 // updateClock starts a loop at the beginning of the second after it is called which calls the clock updating function.
 // It loops anytime there is input or when a second has passed.
 func updateClock(s tcell.Screen, forceUpdateChan chan bool) {
@@ -208,6 +240,7 @@ func updateClock(s tcell.Screen, forceUpdateChan chan bool) {
 		// Waits for next tick of ticker or next forced update,
 		select {
 		case currTime = <-ticker.C:
+			doRebound()
 		case <-forceUpdateChan:
 		}
 	}
