@@ -145,19 +145,19 @@ func handleInput(s tcell.Screen, forceUpdate chan bool) {
 					forceUpdate <- true
 
 				case 'h':
-					moveClock(-1, 0)
+					moveClockWithLock(-1, 0)
 					forceUpdate <- true
 
 				case 'j':
-					moveClock(0, 1)
+					moveClockWithLock(0, 1)
 					forceUpdate <- true
 
 				case 'k':
-					moveClock(0, -1)
+					moveClockWithLock(0, -1)
 					forceUpdate <- true
 
 				case 'l':
-					moveClock(1, 0)
+					moveClockWithLock(1, 0)
 					forceUpdate <- true
 				case 'r', 'R':
 					options.Lock()
@@ -204,14 +204,17 @@ func doRebound() {
 		options.yReboundDirection = -1
 	}
 
-	options.xOffset += options.xReboundDirection
-	options.yOffset += options.yReboundDirection
+	moveClock(options.xReboundDirection, options.yReboundDirection)
 }
 
-func moveClock(x, y int) {
+func moveClockWithLock(x, y int) {
 	options.Lock()
 	defer options.Unlock()
 
+	moveClock(x, y)
+}
+
+func moveClock(x, y int) {
 	if options.Center {
 		return
 	}
