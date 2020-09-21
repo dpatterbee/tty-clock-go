@@ -212,7 +212,7 @@ func moveClock(x, y int) {
 	options.Lock()
 	defer options.Unlock()
 
-	if options.Center || options.Rebound {
+	if options.Center {
 		return
 	}
 
