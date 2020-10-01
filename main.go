@@ -80,6 +80,8 @@ func main() {
 
 	options.terminalSizeX, options.terminalSizeY = s.Size()
 	options.yOffset = 1
+	options.xReboundDirection = 1
+	options.yReboundDirection = 1
 	options.Unlock()
 
 	forceUpdate := make(chan bool)
@@ -141,6 +143,7 @@ func handleInput(s tcell.Screen, forceUpdate chan bool) {
 
 					options.Lock()
 					options.Center = !options.Center
+					options.Rebound = false
 					options.Unlock()
 					forceUpdate <- true
 
@@ -162,6 +165,7 @@ func handleInput(s tcell.Screen, forceUpdate chan bool) {
 				case 'r', 'R':
 					options.Lock()
 					options.Rebound = !options.Rebound
+					options.Center = false
 					options.Unlock()
 
 				}
@@ -197,10 +201,10 @@ func doRebound() {
 	if options.yOffset <= 1 {
 		options.yReboundDirection = 1
 	}
-	if options.xOffset > options.terminalSizeX-options.displaySizeX-1 {
+	if options.xOffset >= options.terminalSizeX-options.displaySizeX-1 {
 		options.xReboundDirection = -1
 	}
-	if options.yOffset > options.terminalSizeY-options.displaySizeY-1 {
+	if options.yOffset >= options.terminalSizeY-options.displaySizeY-1 {
 		options.yReboundDirection = -1
 	}
 
