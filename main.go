@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gdamore/tcell"
+	"github.com/gdamore/tcell/v2"
 	"github.com/jessevdk/go-flags"
 )
 
@@ -74,8 +74,8 @@ func main() {
 	if options.Colour > 378 || options.Colour < 1 {
 		options.Colour = 2
 	}
-	options.defStyle = tcell.StyleDefault.Foreground(tcell.Color(options.Colour))
-	options.onStyle = tcell.StyleDefault.Background(tcell.Color(options.Colour))
+	options.defStyle = tcell.StyleDefault.Foreground(tcell.Color(options.Colour + 1<<32))
+	options.onStyle = tcell.StyleDefault.Background(tcell.Color(options.Colour + 1<<32))
 	s.SetStyle(options.defStyle)
 
 	options.terminalSizeX, options.terminalSizeY = s.Size()
